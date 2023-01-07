@@ -58,9 +58,13 @@ plugin_dicts: Dict[str, Dict[str, MangaClient]] = {
         "TMO": TMOClient(),
         "Mangatigre": MangatigreClient(),
         "NineManga": NineMangaClient(language='es'),
+        "MangasIn": MangasInClient(),
     }
 }
 
+cache_dir = "cache"
+if os.path.exists(cache_dir):
+    shutil.rmtree(cache_dir)
 with open("tools/help_message.txt", "r") as f:
     help_msg = f.read()
 
@@ -151,7 +155,7 @@ async def on_private_message(client: Client, message: Message):
     except pyrogram.errors.UserNotParticipant:
         await message.reply("In order to use the bot you must join it's update channel.",
                             reply_markup=InlineKeyboardMarkup(
-                                [[InlineKeyboardButton('Join!', url=f't.me/Wizard_Bots')]]
+                                [[InlineKeyboardButton('Join!', url=f't.me/{channel}')]]
                             ))
 
 
@@ -162,10 +166,13 @@ async def on_start(client: Client, message: Message):
                         "How to use? Just type the name of some manga you want to keep up to date.\n"
                         "\n"
                         "For example:\n"
-                        "`One Piece\n"
+                        "`Fire Force`\n"
                         "\n"
-                        "Check /help for more information.")
-                        
+                        "Check /help for more information.",
+                        reply_markup=InlineKeyboardMarkup(
+                                [[InlineKeyboardButton('Update Channel', url=f't.me/{channel}')]]
+                            ))
+
 
 @bot.on_message(filters=filters.command(['help']))
 async def on_help(client: Client, message: Message): 
@@ -390,7 +397,7 @@ async def chapter_click(client, data, chat_id):
         options = options.output if options else (1 << 30) - 1
 
         caption = '\n'.join([
-            f'{chapter.manga.name} - {chapter.name}',
+            f'{chapter.name} - {chapter.manga.name}',
             f'{chapter.get_url()}'
         ])
 
@@ -405,8 +412,14 @@ async def chapter_click(client, data, chat_id):
             if not chapter.pictures:
                 return await bot.send_message(chat_id, f'There was an error parsing this chapter or chapter is missing' +
                                               f', please check the chapter at the web\n\n{caption}')
-            ch_name = clean(f'{clean(chapter.manga.name, 25)} - {chapter.name}', 45)
-            pdf, thumb_path = fld2pdf(pictures_folder, ch_name)
+            ch_name = clean(f'{clean(chapter.name, 25)} - {chapter.manga.name}', 45)
+            try:
+                pdf, thumb_path = fld2pdf(pictures_folder, ch_name)
+            except Exception as e:
+                print(f'Error creating pdf for {chapter.name} - {chapter.manga.name}\n{e}')
+                return await bot.send_message(chat_id, f'There was an error making the pdf for this chapter. '
+                                                       f'Please contact the developer with the name of the manga'
+                                                       f' and the chapter number.')
             cbz = fld2cbz(pictures_folder, ch_name)
             telegraph_url = await img2tph(chapter, clean(f'{chapter.manga.name} {chapter.name}'))
 
@@ -432,7 +445,7 @@ async def chapter_click(client, data, chat_id):
 
         chapterFile = await db.get(ChapterFile, chapter.url)
 
-        caption = f'{chapter.manga.name} - {chapter.name}\n'
+        caption = f'{chapter.name} - {chapter.manga.name}\n'
         if options & OutputOptions.Telegraph:
             caption += f'[Read on telegraph]({chapterFile.telegraph_url})\n'
         caption += f'[Read on website]({chapter.get_url()})'
